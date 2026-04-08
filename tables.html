@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Table Master - Voice Update</title>
+<style>
+  /* --- THEME VARIABLES --- */
+  :root {
+    --bg-color1: #e0c3fc; --bg-color2: #8ec5fc;
+    --card-bg: rgba(255, 255, 255, 0.95);
+    --text-main: #1e293b; --text-muted: #64748b;
+    --primary: #3b82f6; --primary-hover: #2563eb;
+    --success: #10b981; --error: #ef4444; --streak: #f59e0b;
+    --btn-bg: #e2e8f0; --btn-border: #94a3b8; --btn-hover: #cbd5e1;
+    --input-bg: #ffffff;
+    --border-radius: 20px;
+  }
+
+  body.theme-sunset {
+    --bg-color1: #ff7e5f; --bg-color2: #feb47b;
+    --card-bg: rgba(255, 240, 230, 0.95);
+    --text-main: #4a1c00; --primary: #ff5722;
+  }
+
+  body.theme-neon {
+    --bg-color1: #000000; --bg-color2: #1a0033;
+    --card-bg: rgba(20, 20, 20, 0.95);
+    --text-main: #00ffcc; --text-muted: #ff00ff;
+    --primary: #ff00ff; --primary-hover: #cc00cc;
+    --btn-bg: #222; --btn-border: #00ffcc; --btn-hover: #333;
+    --input-bg: #111;
+  }
+
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  body { 
+    font-family: system-ui, -apple-system, sans-serif; 
+    background: linear-gradient(135deg, var(--bg-color1) 0%, var(--bg-color2) 100%);
+    background-size: 200% 200%;
+    display: flex; justify-content: center; align-items: center; 
+    min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;
+    transition: all 0.5s ease;
+  }
+
+  body.streak-active { animation: gradientShift 3s ease infinite; }
+
+  .container { 
+    background: var(--card-bg); padding: 2rem; border-radius: var(--border-radius); 
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); text-align: center; 
+    max-width: 500px; width: 100%; backdrop-filter: blur(10px);
+    transition: all 0.4s ease; position: relative;
+  }
+
+  /* Header & Metagame UI */
+  .top-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: bold; color: var(--text-muted); margin-bottom: 15px; }
+  .xp-badge { background: var(--streak); color: white; padding: 5px 10px; border-radius: 10px; }
+  
+  h1 { color: var(--text-main); margin: 0 0 1rem 0; font-size: 2.2rem; font-weight: 800; }
+
+  .controls { display: grid; gap: 10px; margin-bottom: 20px; }
+  select, button.game-mode-btn { 
+    padding: 12px; border-radius: 12px; border: 2px solid var(--btn-border); 
+    font-size: 1rem; font-weight: bold; color: var(--text-main); 
+    background-color: var(--input-bg); cursor: pointer; transition: all 0.2s ease;
+  }
+  select:focus { border-color: var(--primary); outline: none; }
+  .game-mode-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+  
+  #bossBattleBtn { background: #8b5cf6; color: white; display: none; }
+  #bossBattleBtn:hover { background: #7c3aed; }
+
+  .timer-container { width: 100%; height: 10px; background: #e2e8f0; border-radius: 5px; margin-bottom: 15px; display: none; overflow: hidden; }
+  .timer-bar { height: 100%; background: var(--error); width: 100%; transition: width 0.1s linear; }
+
+  #question { font-size: 3.5rem; font-weight: 800; margin: 1rem 0; color: var(--text-main); }
+  
+  #arrayVisual { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 15px; min-height: 50px;}
+  .array-row { display: flex; gap: 4px; }
+  .array-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--primary); opacity: 0; animation: fadeIn 0.3s forwards; }
+  @keyframes fadeIn { to { opacity: 1; } }
+
+  .input-wrapper { display: flex; justify-content: center; gap: 10px; align-items: center; }
+  #answerArea { display: none; width: 100%; flex-direction: column; align-items: center;}
+  
+  .input-controls { display: flex; justify-content: center; gap: 10px; align-items: center; }
+  #answer { 
+    width: 140px; text-align: center; font-size: 2rem; font-weight: bold; padding: 15px;
+    border-radius: 12px; border: 3px solid var(--btn-border); background-color: var(--input-bg); color: var(--text-main);
+  }
+  #answer:focus { outline: none; border-color: var(--primary); }
+  
+  .mic-btn { background: var(--btn-bg); color: var(--text-main); border: 2px solid var(--btn-border); border-radius: 50%; width: 55px; height: 55px; font-size: 1.5rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+  .mic-btn.listening { animation: pulse 1s infinite; background: var(--error); color: white; border-color: var(--error); }
+  @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+  /* Live Voice Transcript Box */
+  .voice-transcript { font-size: 1.1rem; color: var(--primary); font-weight: bold; margin-top: 10px; min-height: 24px; font-style: italic; display: none; }
+
+  #mcqArea { display: none; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .mcq-btn { padding: 15px; font-size: 1.4rem; font-weight: bold; background-color: var(--btn-bg); color: var(--text-main); border: 3px solid var(--btn-border); border-radius: 12px; cursor: pointer; transition: all 0.15s; }
+  .mcq-btn:hover:not(:disabled) { background-color: var(--btn-hover); transform: translateY(-2px); }
+  .mcq-btn.hint-highlight { background-color: var(--success) !important; color: white !important; border-color: var(--success) !important; transform: scale(1.05); }
+
+  .feedback { min-height: 28px; font-weight: 800; margin-top: 15px; font-size: 1.3rem; }
+  .correct { color: var(--success); } .incorrect { color: var(--error); }
+  
+  .stats { display: flex; justify-content: space-around; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid var(--btn-border); font-weight: 700; color: var(--text-muted); }
+  #score { color: var(--primary); font-size: 1.3rem; }
+  #streak { color: var(--streak); font-size: 1.3rem; }
+  .high-score-badge { font-size: 0.85rem; color: var(--text-muted); margin-top: 10px; font-weight: bold;}
+
+  @keyframes shake { 0%, 100% {transform: translateX(0);} 25% {transform: translateX(-10px);} 75% {transform: translateX(10px);} }
+  .shake { animation: shake 0.3s ease-in-out; }
+
+  #confetti-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 10; display: none; }
+  .confetti-piece { position: absolute; width: 10px; height: 10px; background: red; animation: fall 2s linear forwards; }
+  @keyframes fall { to { transform: translateY(500px) rotate(720deg); opacity: 0; } }
+
+</style>
+</head>
+<body>
+
+<div class="container" id="appContainer">
+  <div id="confetti-container"></div>
+  
+  <div class="top-bar">
+    <div class="xp-badge" id="xpElement">XP: <span id="xpDisplay">0</span></div>
+    <div>
+      <select id="themeSelect" style="padding: 5px; font-size: 0.8rem;">
+        <option value="default">Default Theme</option>
+        <option value="sunset" id="optSunset" disabled>Sunset (100 XP)</option>
+        <option value="neon" id="optNeon" disabled>Neon (300 XP)</option>
+      </select>
+    </div>
+  </div>
+
+  <h1>Table Master 🚀</h1>
+  
+  <div class="controls">
+    <select id="tableSelect">
+      <option value="" disabled selected>1. Choose a Table...</option>
+      <option value="random">🌟 Mixed Practice (1-20)</option>
+    </select>
+    
+    <select id="levelSelect">
+      <option value="learning" selected>🟢 Learning (Visual Array & Hint)</option>
+      <option value="practice">🟡 Practice (Multiple Choice)</option>
+      <option value="advanced">🟠 Advanced (Type & Auto-Submit)</option>
+      <option value="master">🔴 Master (Voice or Type)</option>
+    </select>
+    
+    <div style="display: flex; gap: 5px;" id="modeButtons">
+      <button class="game-mode-btn active" id="modeCasual" style="flex:1;">Casual</button>
+      <button class="game-mode-btn" id="modeTime" style="flex:1;">Time Attack</button>
+    </div>
+    <button id="bossBattleBtn" class="game-mode-btn">👹 Boss Battle (Nemesis Numbers)</button>
+  </div>
+  
+  <div class="timer-container" id="timerContainer"><div class="timer-bar" id="timerBar"></div></div>
+
+  <div id="gameArea" style="display:none;">
+    <div id="question"></div>
+    <div id="arrayVisual"></div>
+    <div id="mcqArea"></div>
+
+    <div id="answerArea">
+      <div class="input-controls">
+        <input type="number" id="answer" placeholder="?" autocomplete="off">
+        <button id="micBtn" class="mic-btn" title="Tap once to speak">🎤</button>
+      </div>
+      <div id="voiceTranscript" class="voice-transcript"></div>
+    </div>
+    
+    <div id="feedback" class="feedback"></div>
+    
+    <div class="stats">
+      <div>Score: <span id="score">0</span></div>
+      <div>Streak: <span id="streak">0</span> <span id="streakEmoji">🔥</span></div>
+    </div>
+    <div class="high-score-badge">🏆 High Score: <span id="highScoreDisplay">0</span></div>
+  </div>
+</div>
+
+<script>
+  // --- STATE & PERSISTENT STORAGE ---
+  let currentTable = 1, currentMultiplier = 1, correctAnswer = 1;
+  let gameMode = 'casual'; 
+  let timeLeft = 60, timerInterval, flashTimeout;
+  
+  let score = parseInt(localStorage.getItem('tm_score')) || 0;
+  let streak = parseInt(localStorage.getItem('tm_streak')) || 0;
+  let highScore = parseInt(localStorage.getItem('tm_highScore')) || 0;
+  let totalXP = parseInt(localStorage.getItem('tm_xp')) || 0;
+  let nemesisNumbers = JSON.parse(localStorage.getItem('tm_nemesis')) || {};
+
+  // --- AUDIO SYNTHESIZER ---
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  function playTone(freq, type, duration, vol=0.1) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = type; osc.frequency.value = freq;
+    osc.connect(gainNode); gainNode.connect(audioCtx.destination);
+    gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+    osc.start(); osc.stop(audioCtx.currentTime + duration);
+  }
+  function playSuccess() { playTone(523.25, 'sine', 0.1); setTimeout(() => playTone(659.25, 'sine', 0.2), 100); }
+  function playError() { playTone(150, 'sawtooth', 0.3, 0.2); }
+  function playLevelUp() { [440, 554.37, 659.25, 880].forEach((f, i) => setTimeout(() => playTone(f, 'square', 0.3), i*100)); }
+
+  // --- DOM ELEMENTS ---
+  const UI = {
+    app: document.getElementById('appContainer'),
+    tableSel: document.getElementById('tableSelect'), levelSel: document.getElementById('levelSelect'),
+    themeSel: document.getElementById('themeSelect'), xpDisp: document.getElementById('xpDisplay'),
+    casualBtn: document.getElementById('modeCasual'), timeBtn: document.getElementById('modeTime'), bossBtn: document.getElementById('bossBattleBtn'),
+    gameArea: document.getElementById('gameArea'), question: document.getElementById('question'),
+    arrayVis: document.getElementById('arrayVisual'), mcqArea: document.getElementById('mcqArea'),
+    ansArea: document.getElementById('answerArea'), answer: document.getElementById('answer'),
+    micBtn: document.getElementById('micBtn'), voiceTranscript: document.getElementById('voiceTranscript'),
+    feedback: document.getElementById('feedback'), score: document.getElementById('score'),
+    streak: document.getElementById('streak'), streakEmoji: document.getElementById('streakEmoji'),
+    timerCont: document.getElementById('timerContainer'), timerBar: document.getElementById('timerBar'),
+    confetti: document.getElementById('confetti-container'), highScore: document.getElementById('highScoreDisplay')
+  };
+
+  // --- INITIALIZATION ---
+  for(let i=1; i<=20; i++) UI.tableSel.innerHTML += `<option value="${i}">Table of ${i}</option>`;
+  updateMetagameUI(); updateStats(); 
+  if(score > 0 || streak > 0) { UI.gameArea.style.display = 'block'; generateQuestion(); }
+
+  function updateMetagameUI() {
+    UI.xpDisp.textContent = totalXP; UI.highScore.textContent = highScore;
+    if (totalXP >= 100) { UI.themeSel.options[1].disabled = false; UI.themeSel.options[1].text = "Sunset Theme"; }
+    if (totalXP >= 300) { UI.themeSel.options[2].disabled = false; UI.themeSel.options[2].text = "Neon Cyberpunk"; }
+    UI.bossBtn.style.display = Object.keys(nemesisNumbers).length > 0 ? 'block' : 'none';
+  }
+
+  UI.themeSel.addEventListener('change', (e) => {
+    document.body.className = '';
+    if(e.target.value !== 'default') document.body.classList.add(`theme-${e.target.value}`);
+  });
+
+  // --- GAME MODES ---
+  UI.casualBtn.onclick = () => setMode('casual'); UI.timeBtn.onclick = () => setMode('time'); UI.bossBtn.onclick = () => setMode('boss');
+
+  function setMode(mode) {
+    gameMode = mode;
+    UI.casualBtn.classList.toggle('active', mode === 'casual'); UI.timeBtn.classList.toggle('active', mode === 'time'); UI.bossBtn.classList.toggle('active', mode === 'boss');
+    UI.timerCont.style.display = mode === 'time' ? 'block' : 'none';
+    score = 0; streak = 0; updateStats();
+    if(UI.tableSel.value) startGame();
+  }
+
+  function startGame() {
+    clearInterval(timerInterval); document.body.classList.remove('streak-active'); UI.gameArea.style.display = 'block';
+    if (gameMode === 'time') {
+      timeLeft = 60;
+      timerInterval = setInterval(() => {
+        timeLeft -= 0.1; UI.timerBar.style.width = `${(timeLeft/60)*100}%`;
+        if(timeLeft <= 0) {
+          clearInterval(timerInterval); UI.feedback.textContent = `Time's Up! Score: ${score}`; UI.gameArea.style.pointerEvents = 'none';
+          setTimeout(() => { UI.gameArea.style.pointerEvents = 'auto'; startGame(); }, 3000);
+        }
+      }, 100);
+    }
+    generateQuestion();
+  }
+
+  UI.tableSel.addEventListener('change', () => { score=0; streak=0; startGame(); });
+  UI.levelSel.addEventListener('change', startGame);
+
+  function drawArray(rows, cols) {
+    UI.arrayVis.innerHTML = '';
+    if (UI.levelSel.value !== 'learning') return; 
+    if (rows * cols > 100) { UI.arrayVis.innerHTML = `<span style="color:#888;font-size:0.9rem;">(Array too large to draw)</span>`; return; }
+    for(let r=0; r<rows; r++) {
+      let rowEl = document.createElement('div'); rowEl.className = 'array-row';
+      for(let c=0; c<cols; c++) {
+        let dot = document.createElement('div'); dot.className = 'array-dot';
+        dot.style.animationDelay = `${(r*cols + c) * 0.02}s`; rowEl.appendChild(dot);
+      }
+      UI.arrayVis.appendChild(rowEl);
+    }
+  }
+
+  function generateQuestion() {
+    clearTimeout(flashTimeout); UI.feedback.textContent = ''; UI.mcqArea.style.pointerEvents = 'auto';
+    UI.voiceTranscript.style.display = 'none'; // Hide voice UI
+    
+    if (gameMode === 'boss' && Object.keys(nemesisNumbers).length > 0) {
+      const keys = Object.keys(nemesisNumbers);
+      const chosen = keys[Math.floor(Math.random() * keys.length)].split('x');
+      currentTable = parseInt(chosen[0]); currentMultiplier = parseInt(chosen[1]);
+    } else {
+      const val = UI.tableSel.value || 1; 
+      currentTable = val === 'random' ? Math.floor(Math.random() * 20) + 1 : parseInt(val);
+      currentMultiplier = Math.floor(Math.random() * 10) + 1;
+    }
+    
+    correctAnswer = currentTable * currentMultiplier;
+    UI.question.textContent = `${currentTable} × ${currentMultiplier}`;
+    
+    const level = UI.levelSel.value;
+    drawArray(currentTable, currentMultiplier);
+
+    // Layout adjustment based on new levels
+    if (level === 'advanced' || level === 'master') {
+      UI.mcqArea.style.display = 'none'; 
+      UI.ansArea.style.display = 'flex';
+      UI.answer.value = ''; UI.answer.focus();
+      // Show mic ONLY in Master mode
+      UI.micBtn.style.display = (level === 'master') ? 'block' : 'none';
+    } else {
+      UI.ansArea.style.display = 'none'; UI.mcqArea.style.display = 'grid';
+      renderMCQ(level);
+    }
+  }
+
+  function renderMCQ(level) {
+    let options = new Set([correctAnswer]);
+    while(options.size < 4) {
+      let fake = correctAnswer + ((Math.floor(Math.random() * 4) + 1) * currentTable * (Math.random() > 0.5 ? 1 : -1));
+      if (fake > 0) options.add(fake);
+    }
+    let arr = Array.from(options).sort(() => Math.random() - 0.5);
+    
+    UI.mcqArea.innerHTML = '';
+    arr.forEach(opt => {
+      let btn = document.createElement('button'); btn.className = 'mcq-btn'; btn.textContent = opt;
+      if (level === 'learning' && opt === correctAnswer) btn.classList.add('hint-highlight');
+      btn.onclick = function() { this.blur(); processAnswer(opt); };
+      UI.mcqArea.appendChild(btn);
+    });
+
+    if (level === 'learning') {
+      UI.mcqArea.style.pointerEvents = 'none';
+      flashTimeout = setTimeout(() => {
+        let hint = document.querySelector('.hint-highlight');
+        if(hint) hint.classList.remove('hint-highlight');
+        UI.mcqArea.style.pointerEvents = 'auto';
+      }, 1500);
+    }
+  }
+
+  function triggerConfetti() {
+    UI.confetti.style.display = 'block'; UI.confetti.innerHTML = '';
+    for(let i=0; i<50; i++) {
+      let c = document.createElement('div'); c.className = 'confetti-piece';
+      c.style.left = Math.random() * 100 + '%';
+      c.style.backgroundColor = ['#f00', '#0f0', '#00f', '#ff0', '#f0f'][Math.floor(Math.random()*5)];
+      c.style.animationDuration = (Math.random() * 1 + 1) + 's';
+      UI.confetti.appendChild(c);
+    }
+    setTimeout(() => UI.confetti.style.display = 'none', 2000);
+  }
+
+  function updateStats() {
+    UI.score.textContent = score; UI.streak.textContent = streak; UI.highScore.textContent = highScore;
+    if (streak > 20) UI.streakEmoji.textContent = '🚀';
+    else if (streak > 10) UI.streakEmoji.textContent = '⚡';
+    else UI.streakEmoji.textContent = '🔥';
+    document.body.classList.toggle('streak-active', streak >= 5);
+    
+    localStorage.setItem('tm_score', score); localStorage.setItem('tm_streak', streak); localStorage.setItem('tm_xp', totalXP);
+    if(score > highScore) { highScore = score; localStorage.setItem('tm_highScore', highScore); }
+  }
+
+  function triggerHaptic(type) {
+    if ('vibrate' in navigator) {
+      if (type === 'success') navigator.vibrate([30, 50, 30]);
+      else if (type === 'error') navigator.vibrate([150, 50, 150]);
+    }
+  }
+
+  function processAnswer(userAnswer) {
+    if (UI.levelSel.value === 'learning' || UI.levelSel.value === 'practice') UI.mcqArea.style.pointerEvents = 'none';
+
+    if (userAnswer === correctAnswer) {
+      playSuccess(); triggerHaptic('success');
+      UI.feedback.textContent = 'Correct! 🎉'; UI.feedback.className = 'feedback correct';
+      
+      let pts = UI.levelSel.value === 'learning' ? 5 : (UI.levelSel.value === 'practice' ? 10 : 20);
+      score += pts; totalXP += pts; streak++;
+      if (gameMode === 'time') timeLeft = Math.min(60, timeLeft + 2); 
+      
+      updateMetagameUI();
+      if(streak % 10 === 0 && streak > 0) { triggerConfetti(); playLevelUp(); }
+
+      let key = `${currentTable}x${currentMultiplier}`;
+      if (nemesisNumbers[key]) {
+        nemesisNumbers[key]--;
+        if(nemesisNumbers[key] <= 0) delete nemesisNumbers[key];
+        localStorage.setItem('tm_nemesis', JSON.stringify(nemesisNumbers));
+      }
+
+      updateStats(); setTimeout(generateQuestion, 500); 
+    } else {
+      playError(); triggerHaptic('error');
+      UI.app.classList.add('shake'); setTimeout(() => UI.app.classList.remove('shake'), 300);
+      
+      UI.feedback.textContent = `Oops! It was ${correctAnswer}`; UI.feedback.className = 'feedback incorrect';
+      streak = 0; updateStats();
+      
+      let key = `${currentTable}x${currentMultiplier}`;
+      nemesisNumbers[key] = (nemesisNumbers[key] || 0) + 1;
+      localStorage.setItem('tm_nemesis', JSON.stringify(nemesisNumbers));
+      updateMetagameUI();
+
+      setTimeout(generateQuestion, 2000); 
+    }
+  }
+
+  UI.answer.addEventListener('input', () => {
+    let lvl = UI.levelSel.value;
+    if ((lvl === 'advanced' || lvl === 'master') && parseInt(UI.answer.value) === correctAnswer) processAnswer(correctAnswer);
+  });
+  UI.answer.addEventListener('keypress', (e) => {
+    let lvl = UI.levelSel.value;
+    if(e.key === 'Enter' && (lvl === 'advanced' || lvl === 'master')) {
+      let val = parseInt(UI.answer.value); if(!isNaN(val)) processAnswer(val);
+    }
+  });
+
+  // --- LIVE INTERIM VOICE RECOGNITION API ---
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRecognition) {
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false; 
+    recognition.interimResults = true; // This allows us to see words as they are spoken!
+    recognition.lang = 'en-US';
+    
+    let isListening = false;
+
+    UI.micBtn.onclick = () => {
+      if (isListening) {
+        recognition.stop();
+      } else {
+        try {
+          recognition.start();
+          UI.micBtn.classList.add('listening');
+          isListening = true;
+          
+          // Show the transcript box
+          UI.voiceTranscript.style.display = 'block';
+          UI.voiceTranscript.textContent = '🗣️ Listening...';
+          UI.feedback.textContent = '';
+        } catch(err) {
+          alert("Microphone error! Ensure you are using Chrome/Edge and running this via a local server (not a file:// URL).");
+        }
+      }
+    };
+
+    // Helper to parse spoken string to integer
+    function parseSpokenString(transcript) {
+      const wordsToNum = {"one":1, "two":2, "three":3, "four":4, "five":5, "six":6, "seven":7, "eight":8, "nine":9, "ten":10, "eleven":11, "twelve":12, "thirteen":13, "fourteen":14, "fifteen":15, "sixteen":16, "seventeen":17, "eighteen":18, "nineteen":19, "twenty":20};
+      let parts = transcript.trim().split(' ');
+      let guessedNum = parseInt(parts[0]);
+      if (isNaN(guessedNum)) guessedNum = wordsToNum[parts[0]];
+      return guessedNum;
+    }
+
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+
+      const activeTranscript = finalTranscript || interimTranscript;
+      
+      // Live UI Update
+      if (activeTranscript) {
+        UI.voiceTranscript.textContent = `🗣️ "${activeTranscript.toLowerCase()}"`;
+      }
+
+      // Check for immediate auto-submit during interim results
+      if (interimTranscript) {
+        let liveGuess = parseSpokenString(interimTranscript.toLowerCase());
+        if (liveGuess === correctAnswer) {
+          recognition.stop();
+          UI.answer.value = liveGuess;
+          processAnswer(liveGuess);
+        }
+      }
+
+      // Process final result if the auto-submit didn't catch it
+      if (finalTranscript) {
+        let finalGuess = parseSpokenString(finalTranscript.toLowerCase());
+        if (finalGuess) {
+          UI.answer.value = finalGuess; 
+          processAnswer(finalGuess);
+        } else {
+          UI.feedback.textContent = "Please try saying a number.";
+          UI.feedback.className = 'feedback incorrect';
+          setTimeout(() => UI.voiceTranscript.style.display = 'none', 1500);
+        }
+      }
+    };
+
+    recognition.onspeechend = () => recognition.stop();
+    recognition.onend = () => {
+      UI.micBtn.classList.remove('listening');
+      isListening = false;
+    };
+    
+    recognition.onerror = (event) => {
+      UI.micBtn.classList.remove('listening');
+      isListening = false;
+      UI.voiceTranscript.style.display = 'none';
+      if (event.error === 'not-allowed') alert("Microphone access was denied by your browser settings.");
+    };
+
+  } else {
+    UI.micBtn.style.display = 'none'; 
+  }
+
+</script>
+</body>
+</html>
