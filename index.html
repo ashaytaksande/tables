@@ -428,42 +428,54 @@
     }
   });
 
-  // --- LIVE INTERIM VOICE RECOGNITION API ---
+// --- IMPROVED VOICE RECOGNITION API ---
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognition) {
     const recognition = new SpeechRecognition();
     recognition.continuous = false; 
-    recognition.interimResults = true; // This allows us to see words as they are spoken!
+    recognition.interimResults = true; 
     recognition.lang = 'en-US';
     
     let isListening = false;
+    let lastProcessedAnswer = null; // Prevents double-submitting
 
     UI.micBtn.onclick = () => {
       if (isListening) {
         recognition.stop();
       } else {
         try {
+          lastProcessedAnswer = null; // Reset for the new question
           recognition.start();
           UI.micBtn.classList.add('listening');
           isListening = true;
           
-          // Show the transcript box
           UI.voiceTranscript.style.display = 'block';
           UI.voiceTranscript.textContent = '🗣️ Listening...';
           UI.feedback.textContent = '';
         } catch(err) {
-          alert("Microphone error! Ensure you are using Chrome/Edge and running this via a local server (not a file:// URL).");
+          console.warn("Mic start error:", err);
         }
       }
     };
 
-    // Helper to parse spoken string to integer
+    // Smarter parser: Strips punctuation and searches the WHOLE sentence for a number
     function parseSpokenString(transcript) {
-      const wordsToNum = {"one":1, "two":2, "three":3, "four":4, "five":5, "six":6, "seven":7, "eight":8, "nine":9, "ten":10, "eleven":11, "twelve":12, "thirteen":13, "fourteen":14, "fifteen":15, "sixteen":16, "seventeen":17, "eighteen":18, "nineteen":19, "twenty":20};
-      let parts = transcript.trim().split(' ');
-      let guessedNum = parseInt(parts[0]);
-      if (isNaN(guessedNum)) guessedNum = wordsToNum[parts[0]];
-      return guessedNum;
+      const cleanTranscript = transcript.toLowerCase().replace(/[.,?!]/g, ''); // Strip punctuation
+      const words = cleanTranscript.trim().split(' ');
+      
+      const wordsToNum = {
+        "zero":0, "one":1, "two":2, "three":3, "four":4, "five":5, "six":6, "seven":7, "eight":8, "nine":9, "ten":10, 
+        "eleven":11, "twelve":12, "thirteen":13, "fourteen":14, "fifteen":15, "sixteen":16, "seventeen":17, "eighteen":18, "nineteen":19, "twenty":20,
+        "thirty":30, "forty":40, "fifty":50, "sixty":60, "seventy":70, "eighty":80, "ninety":90, "hundred":100
+      };
+
+      // Loop through every word spoken to find a valid number
+      for (let word of words) {
+        let num = parseInt(word);
+        if (!isNaN(num)) return num; // Found an actual digit (e.g., "14")
+        if (wordsToNum[word] !== undefined) return wordsToNum[word]; // Found a written word (e.g., "fourteen")
+      }
+      return null; // No numbers found in the sentence
     }
 
     recognition.onresult = (event) => {
@@ -480,46 +492,56 @@
 
       const activeTranscript = finalTranscript || interimTranscript;
       
-      // Live UI Update
       if (activeTranscript) {
-        UI.voiceTranscript.textContent = `🗣️ "${activeTranscript.toLowerCase()}"`;
+        UI.voiceTranscript.textContent = `🗣️ "${activeTranscript}"`;
       }
 
-      // Check for immediate auto-submit during interim results
-      if (interimTranscript) {
-        let liveGuess = parseSpokenString(interimTranscript.toLowerCase());
-        if (liveGuess === correctAnswer) {
-          recognition.stop();
-          UI.answer.value = liveGuess;
-          processAnswer(liveGuess);
-        }
-      }
+      // Try to extract a number from whatever was just heard
+      let guess = parseSpokenString(activeTranscript);
 
-      // Process final result if the auto-submit didn't catch it
-      if (finalTranscript) {
-        let finalGuess = parseSpokenString(finalTranscript.toLowerCase());
-        if (finalGuess) {
-          UI.answer.value = finalGuess; 
-          processAnswer(finalGuess);
-        } else {
-          UI.feedback.textContent = "Please try saying a number.";
-          UI.feedback.className = 'feedback incorrect';
-          setTimeout(() => UI.voiceTranscript.style.display = 'none', 1500);
-        }
+      // Auto-submit instantly if the correct answer is found anywhere in the speech
+      if (guess !== null && guess === correctAnswer && guess !== lastProcessedAnswer) {
+        lastProcessedAnswer = guess; // Lock it
+        recognition.stop();
+        UI.answer.value = guess;
+        processAnswer(guess);
+      } 
+      // If they finished speaking, found a number, but it was wrong
+      else if (finalTranscript && guess !== null && guess !== correctAnswer && guess !== lastProcessedAnswer) {
+        lastProcessedAnswer = guess;
+        UI.answer.value = guess;
+        processAnswer(guess);
+      }
+      // If they finished speaking but no numbers were detected at all
+      else if (finalTranscript && guess === null) {
+        UI.feedback.textContent = "Didn't catch a number. Try again!";
+        UI.feedback.className = 'feedback incorrect';
+        setTimeout(() => { if(!isListening) UI.voiceTranscript.style.display = 'none'; }, 2000);
       }
     };
 
     recognition.onspeechend = () => recognition.stop();
+    
     recognition.onend = () => {
       UI.micBtn.classList.remove('listening');
       isListening = false;
+      if (UI.voiceTranscript.textContent === '🗣️ Listening...') {
+        UI.voiceTranscript.style.display = 'none';
+      }
     };
     
     recognition.onerror = (event) => {
       UI.micBtn.classList.remove('listening');
       isListening = false;
       UI.voiceTranscript.style.display = 'none';
-      if (event.error === 'not-allowed') alert("Microphone access was denied by your browser settings.");
+      
+      // Better Error Feedback for the user
+      if (event.error === 'not-allowed') {
+        UI.feedback.textContent = "Mic access blocked!";
+      } else if (event.error === 'network') {
+        UI.feedback.textContent = "Network error. Voice needs internet!";
+      }
+      UI.feedback.className = 'feedback incorrect';
     };
 
   } else {
@@ -527,5 +549,7 @@
   }
 
 </script>
+</body>
+</html>
 </body>
 </html>
