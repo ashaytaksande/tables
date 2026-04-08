@@ -313,11 +313,13 @@
   function endTutorial() {
     document.getElementById('tutorialOverlay').style.display = 'none';
     document.querySelectorAll('.highlight-element').forEach(el => el.classList.remove('highlight-element'));
-    localStorage.setItem('tm_seenTutorial', 'true');
+    
+    // We use a V2 key so it guaranteed triggers for you today even if you dismissed the old one!
+    localStorage.setItem('tm_seenTutorial_v2', 'true');
     UI.ansArea.style.display = 'none'; 
   }
 
-  if(!localStorage.getItem('tm_seenTutorial')) { setTimeout(startTutorial, 500); }
+  if(!localStorage.getItem('tm_seenTutorial_v2')) { setTimeout(startTutorial, 500); }
 
   // --- GAME MODES ---
   UI.casualBtn.onclick = () => setMode('casual'); UI.timeBtn.onclick = () => setMode('time'); UI.bossBtn.onclick = () => setMode('boss');
@@ -362,9 +364,13 @@
     }
   }
 
+  // Added voiceLock variable to prevent double-firing
+  let lastProcessedAnswer = null;
+
   function generateQuestion() {
     clearTimeout(flashTimeout); UI.feedback.textContent = ''; UI.mcqArea.style.pointerEvents = 'auto';
     UI.voiceTranscript.style.display = 'none'; 
+    lastProcessedAnswer = null; // Reset the voice lock
     
     if (gameMode === 'boss' && Object.keys(nemesisNumbers).length > 0) {
       const keys = Object.keys(nemesisNumbers);
@@ -450,24 +456,15 @@
   }
 
   function checkThemeUnlocks() {
-    // Robust check: if you have the XP but the option is still disabled, it unlocks and sets it!
     if (totalXP >= 100 && UI.themeSel.options[1].disabled) {
-      UI.themeSel.options[1].disabled = false;
-      UI.themeSel.options[1].text = "Sunset Theme";
-      setTheme('sunset');
-      UI.feedback.textContent = 'Sunset Theme Unlocked! 🌅';
-      UI.feedback.className = 'feedback correct';
-      playLevelUp(); triggerConfetti();
-      return true; // True indicates we triggered a milestone
+      UI.themeSel.options[1].disabled = false; UI.themeSel.options[1].text = "Sunset Theme";
+      setTheme('sunset'); UI.feedback.textContent = 'Sunset Theme Unlocked! 🌅'; UI.feedback.className = 'feedback correct';
+      playLevelUp(); triggerConfetti(); return true; 
     } 
     if (totalXP >= 300 && UI.themeSel.options[2].disabled) {
-      UI.themeSel.options[2].disabled = false;
-      UI.themeSel.options[2].text = "Neon Cyberpunk";
-      setTheme('neon');
-      UI.feedback.textContent = 'Neon Theme Unlocked! 🌃';
-      UI.feedback.className = 'feedback correct';
-      playLevelUp(); triggerConfetti();
-      return true;
+      UI.themeSel.options[2].disabled = false; UI.themeSel.options[2].text = "Neon Cyberpunk";
+      setTheme('neon'); UI.feedback.textContent = 'Neon Theme Unlocked! 🌃'; UI.feedback.className = 'feedback correct';
+      playLevelUp(); triggerConfetti(); return true;
     }
     return false;
   }
@@ -479,6 +476,7 @@
       playSuccess(); triggerHaptic('success');
       
       let pts = UI.levelSel.value === 'learning' ? 5 : (UI.levelSel.value === 'practice' ? 10 : 20);
+      let previousXP = totalXP;
       score += pts; totalXP += pts; streak++;
       if (gameMode === 'time') timeLeft = Math.min(60, timeLeft + 2); 
       
@@ -492,7 +490,6 @@
         if(streak % 10 === 0 && streak > 0) { triggerConfetti(); playLevelUp(); }
         setTimeout(generateQuestion, 500); 
       } else {
-        // Wait longer if a theme unlocked so they can read the notification
         setTimeout(generateQuestion, 2000);
       }
 
@@ -530,13 +527,16 @@
     }
   });
 
-  // --- BULLETPROOF VOICE RECOGNITION API ---
+  // --- HYBRID VOICE RECOGNITION API ---
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognition) {
     const recognition = new SpeechRecognition();
     recognition.continuous = false; 
-    // CRITICAL FIX: interimResults is OFF. It now waits until you finish talking to ensure accurate compound numbers.
-    recognition.interimResults = false; 
+    
+    // TURNED ON: This allows snappy, instant auto-submits for single words
+    recognition.interimResults = true; 
+    
+    // Using Indian English accent logic
     recognition.lang = 'en-IN';
     
     let isListening = false;
@@ -546,6 +546,7 @@
         recognition.stop();
       } else {
         try {
+          lastProcessedAnswer = null; // Lock reset on tap
           recognition.start();
           UI.micBtn.classList.add('listening');
           isListening = true;
@@ -558,14 +559,10 @@
       }
     };
 
-    // The Master Parser
     function extractAnswer(transcript, correctAns) {
-        let text = transcript.toLowerCase().replace(/[.,?!-]/g, ' ');
-
-        // Check if digits are literally in the string (e.g. "42")
+        let text = transcript.toLowerCase().replace(/[.,?!-]/g, ' ').trim();
         if (text.includes(correctAns.toString())) return correctAns;
 
-        // Map spoken words to their numerical value
         const map = {
             zero:0, one:1, won:1, two:2, to:2, too:2, three:3, tree:3, free:3,
             four:4, for:4, five:5, six:6, sex:6, seven:7, eight:8, ate:8,
@@ -576,48 +573,59 @@
         };
 
         let words = text.split(/\s+/);
-        let sum = 0;
-        let temp = 0;
-        let hasNumber = false;
+        let sum = 0; let temp = 0; let hasNumber = false;
 
-        // Smart addition (e.g., "forty" + "two" = 42, "one" * "hundred" + "twenty" = 120)
         for(let w of words) {
             let val = map[w] !== undefined ? map[w] : parseInt(w);
             if(!isNaN(val)) {
                 hasNumber = true;
-                if(val === 100) {
-                    temp = temp === 0 ? 100 : temp * 100;
-                } else {
-                    temp += val;
-                }
+                if(val === 100) temp = temp === 0 ? 100 : temp * 100;
+                else temp += val;
             }
         }
         sum += temp;
 
         if (hasNumber && sum === correctAns) return correctAns;
 
-        // Fallback: Did they say it digit by digit? ("four" "two" -> 42)
         let spelledDigits = words.map(w => map[w] !== undefined && map[w] < 10 ? map[w] : '').join('');
         if (spelledDigits.includes(correctAns.toString())) return correctAns;
 
-        // If it found a number but it was wrong, return it
         if (hasNumber) return sum;
         return null;
     }
 
     recognition.onresult = (event) => {
-      let finalTranscript = event.results[0][0].transcript;
-      UI.voiceTranscript.textContent = `🗣️ "${finalTranscript}"`;
+      let interimTranscript = '';
+      let finalTranscript = '';
 
-      let guess = extractAnswer(finalTranscript, correctAnswer);
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+        else interimTranscript += event.results[i][0].transcript;
+      }
 
-      if (guess !== null) {
-        UI.answer.value = guess; 
+      const activeTranscript = finalTranscript || interimTranscript;
+      if (activeTranscript) UI.voiceTranscript.textContent = `🗣️ "${activeTranscript.toLowerCase()}"`;
+
+      let guess = extractAnswer(activeTranscript, correctAnswer);
+
+      // INSTANT AUTO-SUBMIT: The exact millisecond we hear the correct answer (even an interim single word)
+      if (guess === correctAnswer && guess !== lastProcessedAnswer) {
+        lastProcessedAnswer = guess;
+        recognition.stop();
+        UI.answer.value = guess;
         processAnswer(guess);
-      } else {
-        UI.feedback.textContent = "Didn't catch a number. Try again!";
-        UI.feedback.className = 'feedback incorrect';
-        setTimeout(() => { if(!isListening) UI.voiceTranscript.style.display = 'none'; }, 2000);
+      } 
+      // DELAYED WRONG ANSWER: If they finish talking entirely and it's wrong (wait for compound numbers)
+      else if (finalTranscript) {
+        lastProcessedAnswer = guess;
+        if (guess !== null) {
+          UI.answer.value = guess;
+          processAnswer(guess);
+        } else {
+          UI.feedback.textContent = "Didn't catch a number. Try again!";
+          UI.feedback.className = 'feedback incorrect';
+          setTimeout(() => { if(!isListening) UI.voiceTranscript.style.display = 'none'; }, 2000);
+        }
       }
     };
 
