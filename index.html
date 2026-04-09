@@ -460,7 +460,7 @@
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognition) {
     const rec = new SpeechRecognition();
-    rec.continuous = false; rec.interimResults = true; rec.lang = 'en-IN';
+    rec.continuous = false; rec.interimResults = false; rec.lang = 'en-IN';
     
 UI.micBtn.onclick = () => {
   try {
