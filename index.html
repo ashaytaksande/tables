@@ -168,6 +168,21 @@
     border: 1px solid rgba(148,163,184,0.35);
   }
 
+  .music-btn {
+    min-height: 40px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 2px solid var(--btn-border);
+    background: var(--btn-bg);
+    color: var(--text-main);
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 900;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+  }
+
   .brand {
     display: flex;
     align-items: center;
@@ -551,7 +566,7 @@
   <div class="top-bar">
     <div class="xp-badge" id="xpElement">XP: <span id="xpDisplay">0</span></div>
     <div class="top-right">
-      <div class="session-badge">Session only</div>
+      <button id="musicToggle" class="music-btn" type="button" aria-label="Toggle music" aria-pressed="true">🎵 Music: On</button>
       <label class="sr-only" for="themeSelect">Theme</label>
       <select id="themeSelect" aria-label="Select theme" style="padding:6px 10px; min-height:40px; width:auto;">
         <option value="default">Default Theme</option>
@@ -642,6 +657,9 @@
   let nemesisNumbers = {};
   let tutorialSeen = false;
   let currentTutorialStep = 0;
+  let musicEnabled = true;
+  let musicStarted = false;
+  let musicLoop = null;
 
   const UI = {
     app: document.getElementById('appContainer'),
@@ -650,6 +668,7 @@
     themeSel: document.getElementById('themeSelect'),
     xpElement: document.getElementById('xpElement'),
     xpDisp: document.getElementById('xpDisplay'),
+    musicToggle: document.getElementById('musicToggle'),
     casualBtn: document.getElementById('modeCasual'),
     timeBtn: document.getElementById('modeTime'),
     bossBtn: document.getElementById('bossBattleBtn'),
@@ -742,6 +761,72 @@
     [440, 554.37, 659.25, 880].forEach((f, i) => setTimeout(() => playTone(f, 'square', 0.22), i * 90));
   }
 
+
+  function updateMusicToggle() {
+    UI.musicToggle.textContent = musicEnabled ? '🎵 Music: On' : '🔇 Music: Off';
+    UI.musicToggle.setAttribute('aria-pressed', musicEnabled ? 'true' : 'false');
+  }
+
+  function stopMusicLoop() {
+    if (musicLoop) {
+      clearInterval(musicLoop);
+      musicLoop = null;
+    }
+  }
+
+  function playMusicPattern() {
+    if (!musicEnabled) return;
+
+    if (gameMode === 'time') {
+      playTone(146.83, 'triangle', 0.5, 0.012);
+      [523.25, 659.25, 783.99, 659.25].forEach((freq, i) => {
+        setTimeout(() => playTone(freq, 'triangle', 0.16, 0.022), i * 170);
+      });
+      return;
+    }
+
+    playTone(196.0, 'sine', 1.1, 0.01);
+    [261.63, 329.63, 392.0].forEach((freq, i) => {
+      setTimeout(() => playTone(freq, 'sine', 0.45, 0.016), i * 380);
+    });
+  }
+
+  function startMusicLoop() {
+    stopMusicLoop();
+    if (!musicEnabled || !musicStarted) return;
+    playMusicPattern();
+    musicLoop = setInterval(playMusicPattern, gameMode === 'time' ? 1200 : 2600);
+  }
+
+  function unlockMusic() {
+    if (musicStarted || !musicEnabled) return;
+    musicStarted = true;
+    startMusicLoop();
+  }
+
+  function toggleMusic() {
+    musicEnabled = !musicEnabled;
+    updateMusicToggle();
+    if (!musicEnabled) {
+      stopMusicLoop();
+      return;
+    }
+    if (!musicStarted) musicStarted = true;
+    startMusicLoop();
+  }
+
+  function setupMusicAutostart() {
+    const start = () => {
+      unlockMusic();
+      window.removeEventListener('pointerdown', start);
+      window.removeEventListener('keydown', start);
+      window.removeEventListener('touchstart', start);
+    };
+    window.addEventListener('pointerdown', start, { once: true });
+    window.addEventListener('keydown', start, { once: true });
+    window.addEventListener('touchstart', start, { once: true });
+  }
+
   function clearPendingQuestion() {
     if (questionTimeout) {
       clearTimeout(questionTimeout);
@@ -767,6 +852,7 @@
     score = 0;
     streak = 0;
     updateStats();
+    if (musicStarted && musicEnabled) startMusicLoop();
     if (UI.tableSel.value) startGame();
   }
 
@@ -1179,6 +1265,7 @@
   UI.tableSel.addEventListener('change', () => { score = 0; streak = 0; updateStats(); startGame(); });
   UI.levelSel.addEventListener('change', () => { if (UI.tableSel.value) startGame(); else renderInputsByLevel(); });
   UI.themeSel.addEventListener('change', e => setBodyTheme(e.target.value));
+  UI.musicToggle.addEventListener('click', toggleMusic);
   UI.answer.addEventListener('input', () => {
     const typed = Number(UI.answer.value);
     if (typed === correctAnswer) processAnswer(typed);
@@ -1191,7 +1278,9 @@
   });
 
   setupSpeech();
+  setupMusicAutostart();
   setBodyTheme('default');
+  updateMusicToggle();
   updateStats();
   updateThemeOptions();
   renderInputsByLevel();
