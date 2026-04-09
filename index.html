@@ -63,7 +63,7 @@
   h1 { color: var(--text-main); margin: 0 0 1rem 0; font-size: 2.2rem; font-weight: 800; }
 
   .controls { display: grid; gap: 10px; margin-bottom: 20px; }
-  select, button.game-mode-btn { 
+  select, button.game-mode-btn, .action-btn { 
     padding: 12px; border-radius: 12px; border: 2px solid var(--btn-border); 
     font-size: 1rem; font-weight: bold; color: var(--text-main); 
     background-color: var(--input-bg); cursor: pointer; transition: all 0.2s ease;
@@ -73,6 +73,9 @@
   
   #bossBattleBtn { background: #8b5cf6; color: white; display: none; }
   #bossBattleBtn:hover { background: #7c3aed; }
+  
+  .tutorial-launcher { background: var(--primary); color: white; border: none; }
+  .tutorial-launcher:hover { background: var(--primary-hover); }
 
   .timer-container { width: 100%; height: 10px; background: #e2e8f0; border-radius: 5px; margin-bottom: 15px; display: none; overflow: hidden; }
   .timer-bar { height: 100%; background: var(--error); width: 100%; transition: width 0.1s linear; }
@@ -112,6 +115,9 @@
   #score { color: var(--primary); font-size: 1.3rem; }
   #streak { color: var(--streak); font-size: 1.3rem; }
   .high-score-badge { font-size: 0.85rem; color: var(--text-muted); margin-top: 10px; font-weight: bold;}
+  
+  .reset-btn { margin-top: 15px; font-size: 0.75rem; color: var(--error); border: 1px solid var(--error); background: transparent; padding: 5px 10px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+  .reset-btn:hover { background: var(--error); color: white; }
 
   @keyframes shake { 0%, 100% {transform: translateX(0);} 25% {transform: translateX(-10px);} 75% {transform: translateX(10px);} }
   .shake { animation: shake 0.3s ease-in-out; }
@@ -156,13 +162,14 @@
         <option value="sunset" id="optSunset" disabled>Sunset (100 XP)</option>
         <option value="neon" id="optNeon" disabled>Neon (300 XP)</option>
       </select>
-      <button class="help-btn" onclick="startTutorial()" title="How to play" style="background: var(--btn-bg); border: 2px solid var(--btn-border); color: var(--text-main); border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-weight: bold; margin-left: 5px;">?</button>
     </div>
   </div>
 
   <h1>Table Master 🚀</h1>
   
   <div class="controls">
+    <button class="action-btn tutorial-launcher" onclick="startTutorial()">📖 Start Tutorial</button>
+    
     <select id="tableSelect">
       <option value="" disabled selected>1. Choose a Table...</option>
       <option value="random">🌟 Mixed Practice (1-20)</option>
@@ -192,7 +199,7 @@
     <div id="answerArea">
       <div class="input-controls">
         <input type="number" id="answer" placeholder="?" autocomplete="off">
-        <button id="micBtn" class="mic-btn" title="Tap once to speak">🎤</button>
+        <button id="micBtn" class="mic-btn" title="Click once to start, again to stop">🎤</button>
       </div>
       <div id="voiceTranscript" class="voice-transcript"></div>
     </div>
@@ -204,6 +211,7 @@
       <div>Streak: <span id="streak">0</span> <span id="streakEmoji">🔥</span></div>
     </div>
     <div class="high-score-badge">🏆 High Score: <span id="highScoreDisplay">0</span></div>
+    <button class="reset-btn" onclick="resetProgress()">⚠️ Reset All Progress</button>
   </div>
 </div>
 
@@ -212,8 +220,9 @@
   let currentTable = 1, currentMultiplier = 1, correctAnswer = 1;
   let gameMode = 'casual'; 
   let timeLeft = 60, timerInterval, flashTimeout;
+  let isListeningMode = false;
   
-  // Storage Helper for Incognito compatibility
+  // Storage Helper
   function getSafeStore(key, def) {
     try { return localStorage.getItem(key) || def; } catch(e) { return def; }
   }
@@ -259,10 +268,23 @@
 
   for(let i=1; i<=20; i++) UI.tableSel.innerHTML += `<option value="${i}">Table of ${i}</option>`;
   
-  // Initialize UI
   setTheme(currentTheme, false);
   updateMetagameUI(); updateStats(); 
-  if(score > 0 || streak > 0) { UI.gameArea.style.display = 'block'; generateQuestion(); }
+  if(score > 0 || streak > 0 || totalXP > 0) { UI.gameArea.style.display = 'block'; generateQuestion(); }
+
+  // --- PROGRESS RESET ---
+  function resetProgress() {
+    if(confirm("Are you sure? This will delete all your XP, streaks, and scores!")) {
+      try { localStorage.clear(); } catch(e) {}
+      score = 0; streak = 0; totalXP = 0; highScore = 0;
+      nemesisNumbers = {};
+      currentTheme = 'default';
+      setTheme('default');
+      updateStats(); updateMetagameUI();
+      generateQuestion();
+      alert("Progress Reset!");
+    }
+  }
 
   // --- THEME MANAGEMENT ---
   function setTheme(themeName, save = true) {
@@ -274,26 +296,31 @@
       try { localStorage.setItem('tm_theme', themeName); } catch(e) {}
     }
   }
-
   UI.themeSel.addEventListener('change', (e) => setTheme(e.target.value));
 
   function updateMetagameUI() {
     UI.xpDisp.textContent = totalXP; UI.highScore.textContent = highScore;
     if (totalXP >= 100) { UI.themeSel.options[1].disabled = false; UI.themeSel.options[1].text = "Sunset Theme"; }
+    else { UI.themeSel.options[1].disabled = true; UI.themeSel.options[1].text = "Sunset (100 XP)"; }
+    
     if (totalXP >= 300) { UI.themeSel.options[2].disabled = false; UI.themeSel.options[2].text = "Neon Cyberpunk"; }
+    else { UI.themeSel.options[2].disabled = true; UI.themeSel.options[2].text = "Neon (300 XP)"; }
+    
     UI.bossBtn.style.display = Object.keys(nemesisNumbers).length > 0 ? 'block' : 'none';
   }
 
   // --- TUTORIAL ---
   const tutorialSteps = [
-    { el: '#tableSelect', title: 'Choose Your Target', text: 'Select a table to practice, or choose "Mixed Practice" to test all tables.' },
-    { el: '#levelSelect', title: 'Difficulty', text: 'Learning mode draws visual dots. Master mode uses voice or typing.' },
-    { el: '#modeButtons', title: 'Pick a Mode', text: 'Casual for building streaks, or Time Attack for speed!' },
-    { el: '#xpElement', title: 'Level Up', text: 'Earn XP for correct answers to unlock new color themes!' }
+    { el: '.tutorial-launcher', title: 'Start Here!', text: 'Need a refresher? You can restart this tour any time with this button.' },
+    { el: '#tableSelect', title: 'Target Table', text: 'Select a table or try "Mixed Practice" for a real challenge.' },
+    { el: '#levelSelect', title: 'Difficulty', text: 'Master mode allows you to use Continuous Voice recognition.' },
+    { el: '#micBtn', title: 'Continuous Mic', text: 'Click ONCE to start listening. It stays on until you click again. Just speak the answers as they appear!' },
+    { el: '.reset-btn', title: 'Fresh Start', text: 'Use this to clear all your progress if you want to start over.' }
   ];
   let currentStep = 0;
   function startTutorial() {
     currentStep = 0; document.getElementById('tutorialOverlay').style.display = 'flex';
+    UI.gameArea.style.display = 'block';
     renderTutorialStep();
   }
   function renderTutorialStep() {
@@ -341,7 +368,7 @@
 
   function generateQuestion() {
     clearTimeout(flashTimeout); UI.feedback.textContent = ''; 
-    UI.mcqArea.style.pointerEvents = 'auto'; UI.voiceTranscript.style.display = 'none';
+    UI.mcqArea.style.pointerEvents = 'auto'; UI.voiceTranscript.style.display = isListeningMode ? 'block' : 'none';
     
     if (gameMode === 'boss' && Object.keys(nemesisNumbers).length > 0) {
       const keys = Object.keys(nemesisNumbers);
@@ -401,7 +428,7 @@
       if (gameMode === 'time') timeLeft = Math.min(60, timeLeft + 2);
       UI.feedback.textContent = 'Correct! 🎉'; UI.feedback.className = 'feedback correct';
       
-      checkThemeUnlocks(); // Updated logic inside
+      checkThemeUnlocks();
       updateStats(); updateMetagameUI();
       setTimeout(generateQuestion, 600);
     } else {
@@ -413,17 +440,14 @@
     }
   }
 
-  // --- FIXED THEME UNLOCK LOGIC ---
   function checkThemeUnlocks() {
     let unlocked = false;
-    // Milestone 1: Sunset
     if (totalXP >= 100 && currentTheme === 'default') {
       setTheme('sunset');
       UI.feedback.textContent = 'Sunset Theme Unlocked! 🌅';
       playLevelUp(); triggerConfetti();
       unlocked = true;
     } 
-    // Milestone 2: Neon
     if (totalXP >= 300 && currentTheme !== 'neon') {
       setTheme('neon');
       UI.feedback.textContent = 'Neon Theme Unlocked! 🌃';
@@ -456,97 +480,86 @@
 
   UI.answer.oninput = () => { if(parseInt(UI.answer.value) === correctAnswer) processAnswer(correctAnswer); };
 
-  // --- FIXED VOICE RECOGNITION ---
+  // --- CONTINUOUS VOICE RECOGNITION ---
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognition) {
     const rec = new SpeechRecognition();
-    rec.continuous = false; rec.interimResults = false; rec.lang = 'en-IN';
+    rec.continuous = true; // Stay on across questions
+    rec.interimResults = true; 
+    rec.lang = 'en-IN';
     
-UI.micBtn.onclick = () => {
-  try {
-    rec.start(); 
-    UI.micBtn.classList.add('listening');
-    UI.voiceTranscript.style.display = 'block';
-    // 1. Alert the user to wait for the hardware to initialize
-    UI.voiceTranscript.textContent = 'Wait...'; 
-  } catch(e) {
-    console.log("Recognition already started");
-  }
-};
-
-// 2. NEW: Trigger this when the mic is actually receiving audio
-rec.onaudiostart = () => {
-  UI.voiceTranscript.textContent = 'Speak Now! 🎙️';
-};
-
-rec.onresult = (e) => {
-  // 3. Capture the transcript from the most recent result
-  let t = e.results[0][0].transcript.toLowerCase().trim();
-  UI.voiceTranscript.textContent = `🗣️ "${t}"`;
-  
-  let guess = extractAnswer(t, correctAnswer);
-  
-  if (guess !== null) {
-    UI.answer.value = guess;
-    // 4. If correct, stop and process
-    if (guess === correctAnswer) {
-      rec.stop(); 
-      processAnswer(guess);
-    } 
-    // If wrong, let the onend handler reset the mic so they can try again
-  }
-};
-
-rec.onerror = (event) => {
-  console.error("Speech Error:", event.error);
-  UI.voiceTranscript.textContent = "Try again...";
-};
-
-rec.onend = () => {
-  UI.micBtn.classList.remove('listening');
-  // Hide transcript after 2 seconds if no answer was processed
-  setTimeout(() => {
-    if (!UI.micBtn.classList.contains('listening')) {
-      UI.voiceTranscript.style.display = 'none';
-    }
-  }, 2000);
-};
-
-function extractAnswer(t, target) {
-    // 1. Clean up: remove punctuation and extra spaces
-    let cleanText = t.toLowerCase().replace(/[.,?!-]/g, ' ').trim();
-    let words = cleanText.split(/\s+/);
-
-    // 2. Direct Digit Check (Handle "5", "05", "005")
-    for (let word of words) {
-        if (!isNaN(parseInt(word)) && parseInt(word) === target) return target;
-    }
-
-    // 3. Expanded Phonetic Map
-    const map = {
-        zero: 0, one: 1, won: 1, two: 2, to: 2, too: 2, three: 3, tree: 3, free: 3,
-        four: 4, for: 4, five: 5, fine: 5, fire: 5, file: 5, phi: 5, // Added common "5" mis-transcripts
-        six: 6, seven: 7, eight: 8, ate: 8, nine: 9, ten: 10, then: 10, tin: 10, 
-        eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15
+    UI.micBtn.onclick = () => {
+      if(!isListeningMode) {
+        try {
+          rec.start(); 
+          isListeningMode = true;
+          UI.micBtn.classList.add('listening');
+          UI.voiceTranscript.style.display = 'block';
+          UI.voiceTranscript.textContent = 'Wait...'; 
+        } catch(e) { console.log(e); }
+      } else {
+        rec.stop();
+        isListeningMode = false;
+        UI.micBtn.classList.remove('listening');
+        UI.voiceTranscript.style.display = 'none';
+      }
     };
 
-    // 4. Word-by-Word Map Check
-    if (words.length === 1 && map[words[0]] !== undefined) {
-        return map[words[0]];
+    rec.onaudiostart = () => {
+      if(isListeningMode) UI.voiceTranscript.textContent = 'Speak Now! 🎙️';
+    };
+
+    rec.onresult = (e) => {
+      // Use resultIndex to only process the LATEST phrase spoken
+      let t = "";
+      for (let i = e.resultIndex; i < e.results.length; ++i) {
+        t += e.results[i][0].transcript;
+      }
+      t = t.toLowerCase().trim();
+      
+      if(t) UI.voiceTranscript.textContent = `🗣️ "${t}"`;
+      
+      let guess = extractAnswer(t, correctAnswer);
+      if (guess !== null && guess === correctAnswer) {
+        UI.answer.value = guess;
+        processAnswer(guess);
+      }
+    };
+
+    rec.onerror = (event) => {
+      if(event.error !== 'no-speech') console.error("Speech Error:", event.error);
+    };
+
+    rec.onend = () => {
+      // If user didn't stop it manually, but it crashed, restart it
+      if(isListeningMode) {
+        try { rec.start(); } catch(e) {}
+      } else {
+        UI.micBtn.classList.remove('listening');
+      }
+    };
+
+    function extractAnswer(t, target) {
+        let cleanText = t.toLowerCase().replace(/[.,?!-]/g, ' ').trim();
+        let words = cleanText.split(/\s+/);
+        for (let word of words) {
+            if (!isNaN(parseInt(word)) && parseInt(word) === target) return target;
+        }
+        const map = {
+            zero:0, one:1, won:1, two:2, to:2, too:2, three:3, tree:3, free:3, four:4, for:4, five:5, fine:5, fire:5, phi:5,
+            six:6, seven:7, eight:8, ate:8, nine:9, ten:10, then:10, tin:10, eleven:11, twelve:12, twenty:20, thirty:30, forty:40
+        };
+        if (words.length === 1 && map[words[0]] !== undefined) return map[words[0]];
+        let sum = 0;
+        words.forEach(w => {
+            if (!isNaN(parseInt(w))) sum += parseInt(w);
+            else if (map[w] !== undefined) sum += map[w];
+        });
+        return sum > 0 ? sum : null;
     }
-
-    // 5. Compound Number Logic (e.g., "twenty five")
-    let sum = 0;
-    words.forEach(w => {
-        if (!isNaN(parseInt(w))) sum += parseInt(w);
-        else if (map[w] !== undefined) sum += map[w];
-    });
-
-    return sum > 0 ? sum : null;
-}
   }
 
-  // --- FIXED TUTORIAL INITIALIZATION ---
+  // --- INITIALIZATION ---
   window.addEventListener('load', () => {
     let seen = false;
     try { seen = localStorage.getItem('tm_seenTutorial_v2') === 'true'; } catch(e) {}
