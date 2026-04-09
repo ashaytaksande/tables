@@ -462,20 +462,55 @@
     const rec = new SpeechRecognition();
     rec.continuous = false; rec.interimResults = true; rec.lang = 'en-IN';
     
-    UI.micBtn.onclick = () => {
-      rec.start(); UI.micBtn.classList.add('listening');
-      UI.voiceTranscript.style.display = 'block'; UI.voiceTranscript.textContent = 'Listening...';
-    };
+UI.micBtn.onclick = () => {
+  try {
+    rec.start(); 
+    UI.micBtn.classList.add('listening');
+    UI.voiceTranscript.style.display = 'block';
+    // 1. Alert the user to wait for the hardware to initialize
+    UI.voiceTranscript.textContent = 'Wait...'; 
+  } catch(e) {
+    console.log("Recognition already started");
+  }
+};
 
-    rec.onresult = (e) => {
-      let t = e.results[0][0].transcript.toLowerCase();
-      UI.voiceTranscript.textContent = `🗣️ "${t}"`;
-      let guess = extractAnswer(t, correctAnswer);
-      if (guess === correctAnswer) {
-        rec.stop(); UI.answer.value = guess; processAnswer(guess);
-      }
-    };
-    rec.onend = () => UI.micBtn.classList.remove('listening');
+// 2. NEW: Trigger this when the mic is actually receiving audio
+rec.onaudiostart = () => {
+  UI.voiceTranscript.textContent = 'Speak Now! 🎙️';
+};
+
+rec.onresult = (e) => {
+  // 3. Capture the transcript from the most recent result
+  let t = e.results[0][0].transcript.toLowerCase().trim();
+  UI.voiceTranscript.textContent = `🗣️ "${t}"`;
+  
+  let guess = extractAnswer(t, correctAnswer);
+  
+  if (guess !== null) {
+    UI.answer.value = guess;
+    // 4. If correct, stop and process
+    if (guess === correctAnswer) {
+      rec.stop(); 
+      processAnswer(guess);
+    } 
+    // If wrong, let the onend handler reset the mic so they can try again
+  }
+};
+
+rec.onerror = (event) => {
+  console.error("Speech Error:", event.error);
+  UI.voiceTranscript.textContent = "Try again...";
+};
+
+rec.onend = () => {
+  UI.micBtn.classList.remove('listening');
+  // Hide transcript after 2 seconds if no answer was processed
+  setTimeout(() => {
+    if (!UI.micBtn.classList.contains('listening')) {
+      UI.voiceTranscript.style.display = 'none';
+    }
+  }, 2000);
+};
 
 function extractAnswer(t, target) {
     // 1. Clean up: remove punctuation and extra spaces
